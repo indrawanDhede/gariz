@@ -378,6 +378,7 @@ function App() {
 
   const handleConfirmUpload = async () => {
     let localFallbackTracks = [];
+    let cloudUploadFailed = false;
 
     try {
       if (hasCloudStorageConfig && supabase) {
@@ -430,6 +431,7 @@ function App() {
           setPendingUploads([]);
           return;
         } catch {
+          cloudUploadFailed = true;
           setUploadMessage(
             "Upload cloud gagal. Menyimpan ke penyimpanan lokal sebagai cadangan.",
           );
@@ -468,9 +470,15 @@ function App() {
 
       setTracks((cur) => [...localFallbackTracks, ...cur]);
       setSelectedTrackId(localFallbackTracks[0].id);
-      setUploadMessage(
-        `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
-      );
+      if (cloudUploadFailed) {
+        setUploadMessage(
+          `${localFallbackTracks.length} lagu tersimpan lokal saja (browser ini). Untuk sinkron antar browser, perbaiki Supabase cloud policy/env.`,
+        );
+      } else {
+        setUploadMessage(
+          `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
+        );
+      }
       setPendingUploads([]);
     } catch {
       localFallbackTracks.forEach((track) => revokeTrackSource(track.source));
