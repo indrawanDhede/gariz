@@ -199,42 +199,215 @@
 .hero-card {
   position: relative;
   border-radius: 30px;
-  padding: 20px;
-  min-height: 100%;
   overflow: hidden;
-}
-
-.hero-card-glow {
-  position: absolute;
-  inset: -30% -10% auto;
-  height: 65%;
-  background:
-    radial-gradient(circle at top, rgba(124, 247, 194, 0.45), transparent 45%),
-    radial-gradient(
-      circle at 20% 30%,
-      rgba(30, 215, 96, 0.28),
-      transparent 35%
-    ),
-    radial-gradient(circle at 100% 0%, rgba(34, 197, 94, 0.28), transparent 25%);
-  filter: blur(20px);
-}
-
-.now-playing {
-  position: relative;
-  z-index: 1;
   display: flex;
-  height: 100%;
-  min-height: 320px;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 24px;
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(8, 12, 10, 0.12), rgba(8, 12, 10, 0.92)),
-    linear-gradient(135deg, rgba(30, 215, 96, 0.28), rgba(12, 16, 13, 0.9));
+  align-items: stretch;
 }
 
-.now-tag,
+/* ── Player card ─────────────────────────────── */
+.player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  padding: 36px 32px;
+  width: 100%;
+  background:
+    linear-gradient(160deg, rgba(30, 215, 96, 0.07) 0%, transparent 55%),
+    linear-gradient(220deg, rgba(124, 247, 194, 0.04) 0%, transparent 60%);
+}
+
+/* Album art */
+.player-art {
+  position: relative;
+  width: min(190px, 100%);
+  aspect-ratio: 1;
+  border-radius: 24px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition:
+    transform 0.45s ease,
+    box-shadow 0.45s ease;
+}
+
+.player-art--playing {
+  transform: scale(1.05);
+  box-shadow:
+    0 32px 72px rgba(0, 0, 0, 0.6),
+    0 0 56px rgba(30, 215, 96, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.player-art-rings {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+}
+
+.player-art-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-art-icon svg {
+  width: 48%;
+  height: 48%;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* Track info */
+.player-info {
+  width: 100%;
+  text-align: center;
+}
+
+.now-tag {
+  display: inline-block;
+  color: #7cf7c2;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.player-title {
+  margin: 8px 0 4px;
+  color: #fff;
+  font-size: clamp(1.2rem, 2vw, 1.7rem);
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-artist {
+  margin: 0;
+  color: rgba(241, 248, 243, 0.52);
+  font-size: 0.92rem;
+}
+
+/* Seekable progress */
+.player-progress-wrap {
+  width: 100%;
+  cursor: pointer;
+  padding: 6px 0;
+  user-select: none;
+}
+
+.player-progress-bar {
+  position: relative;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: height 0.15s;
+}
+
+.player-progress-wrap:hover .player-progress-bar {
+  height: 6px;
+}
+
+.player-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7cf7c2, #1ed760);
+  pointer-events: none;
+}
+
+.player-progress-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s;
+  pointer-events: none;
+}
+
+.player-progress-wrap:hover .player-progress-thumb {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.player-time {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: rgba(241, 248, 243, 0.4);
+  font-size: 0.78rem;
+}
+
+/* Playback controls */
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.player-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.player-btn:hover:not(:disabled) {
+  transform: scale(1.09);
+}
+
+.player-btn:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.player-btn--sm {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.player-btn--sm:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.player-btn--main {
+  width: 68px;
+  height: 68px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #7cf7c2, #1ed760);
+  color: #04130a;
+  box-shadow: 0 8px 28px rgba(30, 215, 96, 0.38);
+}
+
+.player-btn--main:hover {
+  box-shadow: 0 14px 42px rgba(30, 215, 96, 0.56);
+}
+
 .badge,
 .track-chip {
   width: fit-content;
@@ -245,45 +418,42 @@
   text-transform: uppercase;
 }
 
-.now-tag {
-  padding: 8px 12px;
-  color: #04130a;
-  background: #7cf7c2;
+/* ── Equalizer bars (active + playing) ────── */
+.eq-bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
 }
 
-.now-playing h2 {
-  margin: 16px 0 8px;
-  color: #fff;
-  font-size: clamp(1.9rem, 3vw, 2.6rem);
-  line-height: 1;
+.eq-bars span {
+  display: inline-block;
+  width: 3px;
+  border-radius: 2px;
+  background: #1ed760;
 }
 
-.now-playing p {
-  margin: 0;
-  color: rgba(241, 248, 243, 0.72);
+.eq-bars span:nth-child(1) {
+  animation: eq-bounce 0.75s ease-in-out infinite;
 }
 
-.progress-track {
-  height: 8px;
-  margin-top: 24px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
+.eq-bars span:nth-child(2) {
+  animation: eq-bounce 0.75s ease-in-out 0.15s infinite;
 }
 
-.progress-track span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #7cf7c2, #1ed760);
+.eq-bars span:nth-child(3) {
+  animation: eq-bounce 0.75s ease-in-out 0.3s infinite;
 }
 
-.progress-meta {
-  display: flex;
-  justify-content: space-between;
-  margin: 10px 0 24px;
-  color: rgba(241, 248, 243, 0.66);
-  font-size: 0.9rem;
+@keyframes eq-bounce {
+  0%,
+  100% {
+    height: 4px;
+  }
+
+  50% {
+    height: 15px;
+  }
 }
 
 .content-grid {

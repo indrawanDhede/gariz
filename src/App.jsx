@@ -211,6 +211,26 @@ function App() {
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  const handleSeek = (event) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const ratio = (event.clientX - rect.left) / rect.width;
+    audio.currentTime = Math.max(0, Math.min(duration, ratio * duration));
+  };
+
+  const handlePrevTrack = () => {
+    if (!tracks.length) return;
+    const idx = tracks.findIndex((t) => t.id === selectedTrackId);
+    setSelectedTrackId(tracks[(idx - 1 + tracks.length) % tracks.length].id);
+  };
+
+  const handleNextTrack = () => {
+    if (!tracks.length) return;
+    const idx = tracks.findIndex((t) => t.id === selectedTrackId);
+    setSelectedTrackId(tracks[(idx + 1) % tracks.length].id);
+  };
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -286,37 +306,114 @@ function App() {
         </div>
 
         <div className="hero-card">
-          <div className="hero-card-glow" />
-          <div className="now-playing">
-            <span className="now-tag">Now playing</span>
-            {selectedTrack ? (
-              <>
-                <h2>{selectedTrack.title}</h2>
-                <p>{selectedTrack.artist}</p>
+          <div className="player-card">
+            <div
+              className={`player-art${isPlaying ? " player-art--playing" : ""}`}
+              style={{
+                background:
+                  selectedTrack?.accent ??
+                  "linear-gradient(135deg, #0d1f14, #0a1510)",
+              }}
+            >
+              <div className="player-art-rings" />
+              <div className="player-art-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+                </svg>
+              </div>
+            </div>
 
-                <div className="progress-track" aria-hidden="true">
-                  <span style={{ width: `${progress}%` }} />
-                </div>
+            <div className="player-info">
+              <p className="now-tag">Now playing</p>
+              <h2 className="player-title">
+                {selectedTrack?.title ?? "Belum ada lagu"}
+              </h2>
+              <p className="player-artist">
+                {selectedTrack
+                  ? selectedTrack.artist
+                  : "Upload lagu untuk mulai"}
+              </p>
+            </div>
 
-                <div className="progress-meta">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{selectedTrack.duration}</span>
-                </div>
+            <div className="player-progress-wrap" onClick={handleSeek}>
+              <div className="player-progress-bar">
+                <div
+                  className="player-progress-fill"
+                  style={{ width: `${progress}%` }}
+                />
+                <div
+                  className="player-progress-thumb"
+                  style={{ left: `${progress}%` }}
+                />
+              </div>
+              <div className="player-time">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration || 0)}</span>
+              </div>
+            </div>
 
-                <button
-                  type="button"
-                  className="mini-button"
-                  onClick={handlePlayPause}
+            <div className="player-controls">
+              <button
+                type="button"
+                className="player-btn player-btn--sm"
+                aria-label="Lagu sebelumnya"
+                disabled={tracks.length < 2}
+                onClick={handlePrevTrack}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  width="20"
+                  height="20"
                 >
-                  {isPlaying ? "Jeda" : "Putar"} track
-                </button>
-              </>
-            ) : (
-              <>
-                <h2>Belum ada lagu</h2>
-                <p>Upload atau tambahkan lagu dulu untuk mulai memutar sesi.</p>
-              </>
-            )}
+                  <path d="M6 6h2v12H6zm3.5 6 8.5 6V6z" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                className="player-btn player-btn--main"
+                aria-label={isPlaying ? "Jeda" : "Putar"}
+                onClick={handlePlayPause}
+              >
+                {isPlaying ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    width="28"
+                    height="28"
+                  >
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                ) : (
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    width="28"
+                    height="28"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className="player-btn player-btn--sm"
+                aria-label="Lagu berikutnya"
+                disabled={tracks.length < 2}
+                onClick={handleNextTrack}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  width="20"
+                  height="20"
+                >
+                  <path d="M6 18l8.5-6L6 6v12zm2.5-6 5.5 3.4V8.6L8.5 12zM16 6h2v12h-2z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -350,7 +447,15 @@ function App() {
                   }}
                 >
                   <span className="track-index">
-                    {String(index + 1).padStart(2, "0")}
+                    {isActive && isPlaying ? (
+                      <span className="eq-bars" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    ) : (
+                      String(index + 1).padStart(2, "00")
+                    )}
                   </span>
                   <span
                     className="track-art"
