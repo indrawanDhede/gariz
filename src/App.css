@@ -505,11 +505,15 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
+  cursor: grab;
   transition:
     transform 180ms ease,
     border-color 180ms ease,
     background-color 180ms ease;
+}
+
+.track-row:active {
+  cursor: grabbing;
 }
 
 .track-row:hover,
@@ -517,6 +521,12 @@
   transform: translateY(-2px);
   border-color: rgba(124, 247, 194, 0.35);
   background: rgba(124, 247, 194, 0.08);
+}
+
+.track-row.drag-over {
+  border-color: rgba(124, 247, 194, 0.75);
+  background: rgba(124, 247, 194, 0.14);
+  box-shadow: 0 0 0 2px rgba(124, 247, 194, 0.2);
 }
 
 .track-index {

@@ -107,6 +107,7 @@ const formatTime = (value) => {
 function App() {
   const audioRef = useRef(null);
   const localUrlsRef = useRef([]);
+  const autoPlayNextRef = useRef(false);
   const [tracks, setTracks] = useState([]);
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -117,6 +118,8 @@ function App() {
   );
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUploads, setPendingUploads] = useState([]);
+  const [isTrackDragging, setIsTrackDragging] = useState(false);
+  const [dragOverTrackId, setDragOverTrackId] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -280,12 +283,22 @@ function App() {
       return undefined;
     }
 
+    const willAutoPlay = autoPlayNextRef.current;
+    autoPlayNextRef.current = false;
+
     audio.pause();
     audio.currentTime = 0;
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
     audio.src = selectedTrack.source;
+
+    if (willAutoPlay) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    }
 
     return undefined;
   }, [selectedTrack]);
@@ -490,16 +503,81 @@ function App() {
     audio.currentTime = Math.max(0, Math.min(duration, ratio * duration));
   };
 
+  const getTrackIndex = (trackId) =>
+    tracks.findIndex((track) => String(track.id) === String(trackId));
+
+  const selectRelativeTrack = (offset, autoPlayRequested = false) => {
+    if (!tracks.length) {
+      return;
+    }
+
+    const currentIndex = getTrackIndex(selectedTrackId);
+    const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex =
+      (safeCurrentIndex + offset + tracks.length) % tracks.length;
+
+    if (autoPlayRequested) {
+      autoPlayNextRef.current = true;
+    }
+
+    setSelectedTrackId(tracks[nextIndex].id);
+  };
+
   const handlePrevTrack = () => {
-    if (!tracks.length) return;
-    const idx = tracks.findIndex((t) => t.id === selectedTrackId);
-    setSelectedTrackId(tracks[(idx - 1 + tracks.length) % tracks.length].id);
+    selectRelativeTrack(-1, isPlaying);
   };
 
   const handleNextTrack = () => {
-    if (!tracks.length) return;
-    const idx = tracks.findIndex((t) => t.id === selectedTrackId);
-    setSelectedTrackId(tracks[(idx + 1) % tracks.length].id);
+    selectRelativeTrack(1, isPlaying);
+  };
+
+  const reorderTracks = (sourceTrackId, targetTrackId) => {
+    if (!sourceTrackId || !targetTrackId || sourceTrackId === targetTrackId) {
+      return;
+    }
+
+    setTracks((currentTracks) => {
+      const nextTracks = [...currentTracks];
+      const sourceIndex = nextTracks.findIndex(
+        (track) => String(track.id) === String(sourceTrackId),
+      );
+      const targetIndex = nextTracks.findIndex(
+        (track) => String(track.id) === String(targetTrackId),
+      );
+
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return currentTracks;
+      }
+
+      const [movedTrack] = nextTracks.splice(sourceIndex, 1);
+      nextTracks.splice(targetIndex, 0, movedTrack);
+      return nextTracks;
+    });
+  };
+
+  const handleTrackDragStart = (event, trackId) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(trackId));
+    setIsTrackDragging(true);
+  };
+
+  const handleTrackDragOver = (event, trackId) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverTrackId(trackId);
+  };
+
+  const handleTrackDrop = (event, targetTrackId) => {
+    event.preventDefault();
+    const sourceTrackId = event.dataTransfer.getData("text/plain");
+    reorderTracks(sourceTrackId, targetTrackId);
+    setDragOverTrackId(null);
+    setIsTrackDragging(false);
+  };
+
+  const handleTrackDragEnd = () => {
+    setDragOverTrackId(null);
+    setIsTrackDragging(false);
   };
 
   return (
@@ -706,10 +784,20 @@ function App() {
               return (
                 <div
                   key={track.id}
-                  className={`track-row ${isActive ? "active" : ""}`}
+                  className={`track-row ${isActive ? "active" : ""} ${
+                    isTrackDragging &&
+                    String(dragOverTrackId) === String(track.id)
+                      ? "drag-over"
+                      : ""
+                  }`}
                   role="button"
                   tabIndex={0}
+                  draggable
                   onClick={() => setSelectedTrackId(track.id)}
+                  onDragStart={(event) => handleTrackDragStart(event, track.id)}
+                  onDragOver={(event) => handleTrackDragOver(event, track.id)}
+                  onDrop={(event) => handleTrackDrop(event, track.id)}
+                  onDragEnd={handleTrackDragEnd}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
@@ -790,7 +878,14 @@ function App() {
         preload="metadata"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleTimeUpdate}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={() => {
+          if (tracks.length > 1) {
+            selectRelativeTrack(1, true);
+            return;
+          }
+
+          setIsPlaying(false);
+        }}
         onPause={() => setIsPlaying(false)}
       />
 
