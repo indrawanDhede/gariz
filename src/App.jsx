@@ -108,12 +108,15 @@ const formatTime = (value) => {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const verifyCloudFileStored = async (storagePath, attempts = 3) => {
+const verifyCloudFileStored = async (storagePath, attempts = 4) => {
   if (!supabase || !storagePath) {
     return false;
   }
 
-  const fileName = storagePath.split("/").pop();
+  const slashIndex = storagePath.lastIndexOf("/");
+  const folderPath = slashIndex > 0 ? storagePath.slice(0, slashIndex) : "";
+  const fileName =
+    slashIndex > 0 ? storagePath.slice(slashIndex + 1) : storagePath;
   if (!fileName) {
     return false;
   }
@@ -121,10 +124,10 @@ const verifyCloudFileStored = async (storagePath, attempts = 3) => {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const { data, error } = await supabase.storage
       .from(CLOUD_BUCKET)
-      .list("tracks", {
-        limit: 10,
+      .list(folderPath, {
+        limit: 200,
         offset: 0,
-        search: fileName,
+        sortBy: { column: "name", order: "asc" },
       });
 
     const hasFile =
@@ -134,7 +137,7 @@ const verifyCloudFileStored = async (storagePath, attempts = 3) => {
     }
 
     if (attempt < attempts - 1) {
-      await wait(350);
+      await wait(300 * (attempt + 1));
     }
   }
 
@@ -420,7 +423,6 @@ function App() {
     }
 
     const uploadBatch = [...pendingUploads];
-    let isUploadSuccessful = false;
     setIsUploading(true);
 
     try {
@@ -476,7 +478,7 @@ function App() {
         setUploadMessage(
           `${cloudTracks.length} lagu berhasil tersimpan dan terverifikasi di cloud.`,
         );
-        isUploadSuccessful = true;
+        setPendingUploads([]);
         return;
       }
 
@@ -515,7 +517,7 @@ function App() {
       setUploadMessage(
         `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
       );
-      isUploadSuccessful = true;
+      setPendingUploads([]);
     } catch {
       if (hasCloudStorageConfig && supabase) {
         setUploadMessage(
@@ -527,9 +529,6 @@ function App() {
         );
       }
     } finally {
-      if (isUploadSuccessful) {
-        setPendingUploads([]);
-      }
       setIsUploading(false);
     }
   };
