@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import "./App.css";
+
+const NowPlayingScene = lazy(() => import("./NowPlayingScene"));
 
 const TRACKS_DB_NAME = "gariz_tracks_db";
 const TRACKS_STORE_NAME = "tracks";
@@ -739,11 +741,20 @@ function App() {
               }}
             >
               <div className="player-art-rings" />
-              <div className="player-art-icon">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
-                </svg>
-              </div>
+              <Suspense
+                fallback={
+                  <div className="player-art-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z" />
+                    </svg>
+                  </div>
+                }
+              >
+                <NowPlayingScene
+                  isPlaying={isPlaying}
+                  currentTime={currentTime}
+                />
+              </Suspense>
             </div>
 
             <div className="player-info">

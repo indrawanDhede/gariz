@@ -262,6 +262,19 @@
   );
 }
 
+.now-playing-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.now-playing-scene canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  filter: saturate(1.12) contrast(1.06);
+}
+
 .player-art-icon {
   position: absolute;
   inset: 0;
