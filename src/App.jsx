@@ -419,6 +419,8 @@ function App() {
       return;
     }
 
+    const uploadBatch = [...pendingUploads];
+    let isUploadSuccessful = false;
     setIsUploading(true);
 
     try {
@@ -426,7 +428,7 @@ function App() {
         setUploadMessage("Sedang upload dan verifikasi lagu di cloud...");
         const cloudTracks = [];
 
-        for (const [index, item] of pendingUploads.entries()) {
+        for (const [index, item] of uploadBatch.entries()) {
           const title =
             item.title.trim() || item.file.name.replace(/\.[^.]+$/, "");
           const extension = item.file.name.includes(".")
@@ -474,11 +476,11 @@ function App() {
         setUploadMessage(
           `${cloudTracks.length} lagu berhasil tersimpan dan terverifikasi di cloud.`,
         );
-        setPendingUploads([]);
+        isUploadSuccessful = true;
         return;
       }
 
-      const localFallbackTracks = pendingUploads.map((item, index) => {
+      const localFallbackTracks = uploadBatch.map((item, index) => {
         const source = URL.createObjectURL(item.file);
         localUrlsRef.current.push(source);
         return {
@@ -513,7 +515,7 @@ function App() {
       setUploadMessage(
         `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
       );
-      setPendingUploads([]);
+      isUploadSuccessful = true;
     } catch {
       if (hasCloudStorageConfig && supabase) {
         setUploadMessage(
@@ -525,6 +527,9 @@ function App() {
         );
       }
     } finally {
+      if (isUploadSuccessful) {
+        setPendingUploads([]);
+      }
       setIsUploading(false);
     }
   };
