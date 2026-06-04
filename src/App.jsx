@@ -1,6 +1,64 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
+const TRACKS_DB_NAME = "gariz_tracks_db";
+const TRACKS_STORE_NAME = "tracks";
+
+const openTracksDb = () =>
+  new Promise((resolve, reject) => {
+    const request = window.indexedDB.open(TRACKS_DB_NAME, 1);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(TRACKS_STORE_NAME)) {
+        db.createObjectStore(TRACKS_STORE_NAME, { keyPath: "id" });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+
+const saveTrackRecord = async (record) => {
+  const db = await openTracksDb();
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRACKS_STORE_NAME, "readwrite");
+    tx.objectStore(TRACKS_STORE_NAME).put(record);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+
+  db.close();
+};
+
+const readTrackRecords = async () => {
+  const db = await openTracksDb();
+
+  const records = await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRACKS_STORE_NAME, "readonly");
+    const request = tx.objectStore(TRACKS_STORE_NAME).getAll();
+    request.onsuccess = () => resolve(request.result ?? []);
+    request.onerror = () => reject(request.error);
+  });
+
+  db.close();
+  return records;
+};
+
+const deleteTrackRecord = async (trackId) => {
+  const db = await openTracksDb();
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(TRACKS_STORE_NAME, "readwrite");
+    tx.objectStore(TRACKS_STORE_NAME).delete(trackId);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+
+  db.close();
+};
+
 const formatTime = (value) => {
   if (!Number.isFinite(value) || value <= 0) {
     return "0:00";
@@ -26,6 +84,48 @@ function App() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUploads, setPendingUploads] = useState([]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPersistedTracks = async () => {
+      try {
+        const records = await readTrackRecords();
+        if (!isMounted) return;
+
+        const hydratedTracks = records
+          .sort((a, b) => b.createdAt - a.createdAt)
+          .map((record) => {
+            const source = URL.createObjectURL(record.file);
+            localUrlsRef.current.push(source);
+            return {
+              id: record.id,
+              title: record.title,
+              artist: record.artist,
+              mood: record.mood,
+              duration: record.duration,
+              accent: record.accent,
+              source,
+            };
+          });
+
+        setTracks(hydratedTracks);
+        setSelectedTrackId(hydratedTracks[0]?.id ?? null);
+      } catch {
+        if (isMounted) {
+          setUploadMessage(
+            "Gagal memuat lagu tersimpan. Coba refresh browser sekali lagi.",
+          );
+        }
+      }
+    };
+
+    loadPersistedTracks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const selectedTrack = useMemo(
     () =>
       tracks.find((track) => track.id === selectedTrackId) ?? tracks[0] ?? null,
@@ -41,7 +141,7 @@ function App() {
     localUrlsRef.current = localUrlsRef.current.filter((url) => url !== source);
   };
 
-  const handleDeleteTrack = (trackId) => {
+  const handleDeleteTrack = async (trackId) => {
     const trackToDelete = tracks.find((track) => track.id === trackId);
 
     if (!trackToDelete) {
@@ -52,6 +152,13 @@ function App() {
 
     revokeTrackSource(trackToDelete.source);
     setTracks(remainingTracks);
+    try {
+      await deleteTrackRecord(trackId);
+    } catch {
+      setUploadMessage(
+        "Lagu terhapus dari list, tapi gagal sinkron ke storage.",
+      );
+    }
 
     if (selectedTrackId === trackId) {
       setSelectedTrackId(remainingTracks[0]?.id ?? null);
@@ -67,7 +174,7 @@ function App() {
     }
   };
 
-  const handleConfirmDeleteTrack = (track) => {
+  const handleConfirmDeleteTrack = async (track) => {
     const shouldDelete = window.confirm(
       `Yakin ingin hapus lagu "${track.title}" dari list?`,
     );
@@ -76,7 +183,7 @@ function App() {
       return;
     }
 
-    handleDeleteTrack(track.id);
+    await handleDeleteTrack(track.id);
   };
 
   useEffect(() => {
@@ -109,7 +216,6 @@ function App() {
       id: Date.now() + index,
       file,
       title: file.name.replace(/\.[^.]+$/, ""),
-      blobUrl: URL.createObjectURL(file),
     }));
     setPendingUploads(pending);
   };
@@ -148,32 +254,58 @@ function App() {
     );
   };
 
-  const handleConfirmUpload = () => {
+  const handleConfirmUpload = async () => {
     const nextTracks = pendingUploads.map((item, index) => {
-      localUrlsRef.current.push(item.blobUrl);
+      const source = URL.createObjectURL(item.file);
+      localUrlsRef.current.push(source);
       return {
         id: item.id,
         title: item.title.trim() || item.file.name.replace(/\.[^.]+$/, ""),
         artist: "Upload terbaru",
         mood: "Fresh drop",
         duration: "Baru saja",
-        source: item.blobUrl,
         accent:
           index % 3 === 0
             ? "linear-gradient(135deg, #1ed760, #0f766e)"
             : index % 3 === 1
               ? "linear-gradient(135deg, #7cf7c2, #14532d)"
               : "linear-gradient(135deg, #22c55e, #064e3b)",
+        source,
+        file: item.file,
       };
     });
-    setTracks((cur) => [...nextTracks, ...cur]);
-    setSelectedTrackId(nextTracks[0].id);
-    setUploadMessage(`${nextTracks.length} lagu baru berhasil diunggah.`);
-    setPendingUploads([]);
+
+    try {
+      await Promise.all(
+        nextTracks.map((track) =>
+          saveTrackRecord({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            mood: track.mood,
+            duration: track.duration,
+            accent: track.accent,
+            createdAt: Date.now(),
+            file: track.file,
+          }),
+        ),
+      );
+
+      setTracks((cur) => [...nextTracks, ...cur]);
+      setSelectedTrackId(nextTracks[0].id);
+      setUploadMessage(
+        `${nextTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
+      );
+      setPendingUploads([]);
+    } catch {
+      nextTracks.forEach((track) => revokeTrackSource(track.source));
+      setUploadMessage(
+        "Upload berhasil dibaca, tapi gagal disimpan. Coba file lebih kecil.",
+      );
+    }
   };
 
   const handleCancelUpload = () => {
-    pendingUploads.forEach((item) => URL.revokeObjectURL(item.blobUrl));
     setPendingUploads([]);
   };
 
