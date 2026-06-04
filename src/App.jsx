@@ -40,6 +40,77 @@ const parseCloudTrackTitle = (fileName) => {
 const sanitizeTitleForPath = (title) =>
   encodeURIComponent(title.replace(/\s+/g, " ").trim()).slice(0, 80);
 
+const MUSIC_EXTENSIONS = new Set([
+  "mp3",
+  "wav",
+  "ogg",
+  "oga",
+  "flac",
+  "m4a",
+  "aac",
+  "opus",
+  "wma",
+  "aiff",
+  "aif",
+  "alac",
+  "weba",
+  "amr",
+  "mid",
+  "midi",
+  "mp4",
+]);
+
+const AUDIO_MIME_BY_EXTENSION = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  opus: "audio/opus",
+  wma: "audio/x-ms-wma",
+  aiff: "audio/aiff",
+  aif: "audio/aiff",
+  alac: "audio/mp4",
+  weba: "audio/webm",
+  amr: "audio/amr",
+  mid: "audio/midi",
+  midi: "audio/midi",
+  mp4: "audio/mp4",
+};
+
+const getFileExtension = (fileName = "") => {
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex < 0 || dotIndex === fileName.length - 1) {
+    return "";
+  }
+
+  return fileName.slice(dotIndex + 1).toLowerCase();
+};
+
+const isLikelyMusicFile = (file) => {
+  if (!file) {
+    return false;
+  }
+
+  if (file.type?.startsWith("audio/")) {
+    return true;
+  }
+
+  const extension = getFileExtension(file.name);
+  return MUSIC_EXTENSIONS.has(extension);
+};
+
+const guessAudioContentType = (file) => {
+  if (file.type?.startsWith("audio/")) {
+    return file.type;
+  }
+
+  const extension = getFileExtension(file.name);
+  return AUDIO_MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
+};
+
 const openTracksDb = () =>
   new Promise((resolve, reject) => {
     const request = window.indexedDB.open(TRACKS_DB_NAME, 1);
@@ -383,12 +454,14 @@ function App() {
   };
 
   const handleFileChange = (event) => {
-    const files = Array.from(event.target.files ?? []).filter((f) =>
-      f.type.startsWith("audio/"),
+    const files = Array.from(event.target.files ?? []).filter(
+      isLikelyMusicFile,
     );
 
     if (!files.length) {
-      setUploadMessage("Pilih file audio (MP3, WAV, OGG, FLAC, dll).");
+      setUploadMessage(
+        "File tidak terdeteksi sebagai musik. Coba format MP3, WAV, OGG, FLAC, M4A, AAC, OPUS, WMA, AIFF, atau MIDI.",
+      );
       event.target.value = "";
       return;
     }
@@ -411,10 +484,15 @@ function App() {
   const handleDrop = (event) => {
     event.preventDefault();
     setIsDragOver(false);
-    const files = Array.from(event.dataTransfer.files).filter((f) =>
-      f.type.startsWith("audio/"),
+    const files = Array.from(event.dataTransfer.files).filter(
+      isLikelyMusicFile,
     );
-    if (!files.length) return;
+    if (!files.length) {
+      setUploadMessage(
+        "File drop belum terdeteksi sebagai musik. Gunakan format audio yang didukung.",
+      );
+      return;
+    }
     preparePendingUploads(files);
   };
 
@@ -452,7 +530,7 @@ function App() {
             .upload(storagePath, item.file, {
               cacheControl: "3600",
               upsert: false,
-              contentType: item.file.type || "audio/mpeg",
+              contentType: guessAudioContentType(item.file),
             });
 
           if (error) {
@@ -788,7 +866,7 @@ function App() {
               id="track-upload"
               className="upload-input"
               type="file"
-              accept="audio/*"
+              accept="audio/*,.mp3,.wav,.ogg,.oga,.flac,.m4a,.aac,.opus,.wma,.aiff,.aif,.alac,.weba,.amr,.mid,.midi,.mp4"
               multiple
               onChange={handleFileChange}
             />
