@@ -1,91 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
-const initialTracks = [
-  {
-    id: 1,
-    title: "Midnight Pulse",
-    artist: "GariZ Internal",
-    mood: "Hype",
-    duration: "3:18",
-    accent: "linear-gradient(135deg, #1ed760, #0f6f3d)",
-  },
-  {
-    id: 2,
-    title: "Backstage Bloom",
-    artist: "GariZ Session",
-    mood: "Chill",
-    duration: "2:44",
-    accent: "linear-gradient(135deg, #7cf7c2, #134e4a)",
-  },
-  {
-    id: 3,
-    title: "Neon Rehearsal",
-    artist: "GariZ Crew",
-    mood: "Focus",
-    duration: "4:02",
-    accent: "linear-gradient(135deg, #36d399, #0f766e)",
-  },
-];
-
-const createDemoTrackUrl = () => {
-  const sampleRate = 22050;
-  const durationSeconds = 12;
-  const totalSamples = sampleRate * durationSeconds;
-  const samples = new Int16Array(totalSamples);
-  const notes = [110, 146.83, 164.81, 130.81];
-
-  for (let index = 0; index < totalSamples; index += 1) {
-    const time = index / sampleRate;
-    const beatPhase = time % 0.5;
-    const note = notes[Math.floor(time / 1.5) % notes.length];
-    const kick =
-      Math.sin(2 * Math.PI * 56 * time) * Math.exp(-beatPhase * 18) * 0.42;
-    const bass = Math.sin(2 * Math.PI * note * time) * 0.18;
-    const pad =
-      Math.sin(2 * Math.PI * note * 0.5 * time + Math.sin(time * 0.8)) * 0.12;
-    const shimmer = Math.sin(2 * Math.PI * note * 2 * time) * 0.06;
-    const noise = Math.sin(index * 12.9898) * 43758.5453;
-    const percussive =
-      (noise - Math.floor(noise) - 0.5) * Math.exp(-beatPhase * 28) * 0.08;
-    const sample = kick + bass + pad + shimmer + percussive;
-
-    samples[index] = Math.max(-1, Math.min(1, sample)) * 32767;
-  }
-
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-
-  const writeString = (offset, string) => {
-    for (let position = 0; position < string.length; position += 1) {
-      view.setUint8(offset + position, string.charCodeAt(position));
-    }
-  };
-
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, samples.length * 2, true);
-
-  let offset = 44;
-
-  samples.forEach((sample) => {
-    view.setInt16(offset, sample, true);
-    offset += 2;
-  });
-
-  return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
-};
-
 const formatTime = (value) => {
   if (!Number.isFinite(value) || value <= 0) {
     return "0:00";
@@ -100,17 +15,8 @@ const formatTime = (value) => {
 function App() {
   const audioRef = useRef(null);
   const localUrlsRef = useRef([]);
-  const demoTrackSource = useMemo(() => createDemoTrackUrl(), []);
-  const [tracks, setTracks] = useState(() => {
-    return [
-      {
-        ...initialTracks[0],
-        source: demoTrackSource,
-      },
-      ...initialTracks.slice(1),
-    ];
-  });
-  const [selectedTrackId, setSelectedTrackId] = useState(initialTracks[0].id);
+  const [tracks, setTracks] = useState([]);
+  const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -194,10 +100,9 @@ function App() {
     const urls = localUrlsRef.current;
 
     return () => {
-      URL.revokeObjectURL(demoTrackSource);
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [demoTrackSource]);
+  }, []);
 
   const preparePendingUploads = (files) => {
     const pending = files.map((file, index) => ({
