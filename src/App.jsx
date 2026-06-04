@@ -1,8 +1,42 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 import "./App.css";
 
 const TRACKS_DB_NAME = "gariz_tracks_db";
 const TRACKS_STORE_NAME = "tracks";
+const CLOUD_BUCKET = "gariz-audio";
+const accentPalette = [
+  "linear-gradient(135deg, #1ed760, #0f766e)",
+  "linear-gradient(135deg, #7cf7c2, #14532d)",
+  "linear-gradient(135deg, #22c55e, #064e3b)",
+];
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const hasCloudStorageConfig = Boolean(supabaseUrl && supabaseAnonKey);
+const supabase = hasCloudStorageConfig
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+const getAccentByIndex = (index) => accentPalette[index % accentPalette.length];
+
+const parseCloudTrackTitle = (fileName) => {
+  const [prefix] = fileName.split(".");
+  const separatorIndex = prefix.indexOf("__");
+
+  if (separatorIndex < 0) {
+    return prefix;
+  }
+
+  const encodedTitle = prefix.slice(separatorIndex + 2);
+  try {
+    return decodeURIComponent(encodedTitle);
+  } catch {
+    return encodedTitle;
+  }
+};
+
+const sanitizeTitleForPath = (title) =>
+  encodeURIComponent(title.replace(/\s+/g, " ").trim()).slice(0, 80);
 
 const openTracksDb = () =>
   new Promise((resolve, reject) => {
@@ -89,6 +123,50 @@ function App() {
 
     const loadPersistedTracks = async () => {
       try {
+        if (hasCloudStorageConfig && supabase) {
+          const { data, error } = await supabase.storage
+            .from(CLOUD_BUCKET)
+            .list("tracks", {
+              limit: 100,
+              offset: 0,
+              sortBy: { column: "created_at", order: "desc" },
+            });
+
+          if (error) {
+            throw error;
+          }
+
+          const cloudTracks = (data ?? [])
+            .filter((item) => item.name && !item.name.endsWith("/"))
+            .map((item, index) => {
+              const storagePath = `tracks/${item.name}`;
+              const {
+                data: { publicUrl },
+              } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
+
+              return {
+                id: `cloud-${item.id ?? item.name}`,
+                title: parseCloudTrackTitle(item.name),
+                artist: "Cloud upload",
+                mood: "Shared",
+                duration: "Online",
+                accent: getAccentByIndex(index),
+                source: publicUrl,
+                storagePath,
+                isCloud: true,
+              };
+            });
+
+          if (!isMounted) return;
+
+          setTracks(cloudTracks);
+          setSelectedTrackId(cloudTracks[0]?.id ?? null);
+          setUploadMessage(
+            "Mode cloud aktif. Lagu tersimpan di storage gratis.",
+          );
+          return;
+        }
+
         const records = await readTrackRecords();
         if (!isMounted) return;
 
@@ -113,7 +191,7 @@ function App() {
       } catch {
         if (isMounted) {
           setUploadMessage(
-            "Gagal memuat lagu tersimpan. Coba refresh browser sekali lagi.",
+            "Gagal memuat storage. Cek koneksi atau konfigurasi cloud storage.",
           );
         }
       }
@@ -152,8 +230,17 @@ function App() {
 
     revokeTrackSource(trackToDelete.source);
     setTracks(remainingTracks);
+
     try {
-      await deleteTrackRecord(trackId);
+      if (trackToDelete.isCloud && supabase) {
+        const { error } = await supabase.storage
+          .from(CLOUD_BUCKET)
+          .remove([trackToDelete.storagePath]);
+
+        if (error) throw error;
+      } else {
+        await deleteTrackRecord(trackId);
+      }
     } catch {
       setUploadMessage(
         "Lagu terhapus dari list, tapi gagal sinkron ke storage.",
@@ -264,18 +351,64 @@ function App() {
         artist: "Upload terbaru",
         mood: "Fresh drop",
         duration: "Baru saja",
-        accent:
-          index % 3 === 0
-            ? "linear-gradient(135deg, #1ed760, #0f766e)"
-            : index % 3 === 1
-              ? "linear-gradient(135deg, #7cf7c2, #14532d)"
-              : "linear-gradient(135deg, #22c55e, #064e3b)",
+        accent: getAccentByIndex(index),
         source,
         file: item.file,
       };
     });
 
     try {
+      if (hasCloudStorageConfig && supabase) {
+        const cloudTracks = [];
+
+        for (const [index, item] of pendingUploads.entries()) {
+          const title =
+            item.title.trim() || item.file.name.replace(/\.[^.]+$/, "");
+          const extension = item.file.name.includes(".")
+            ? item.file.name.slice(item.file.name.lastIndexOf("."))
+            : "";
+          const safeTitle = sanitizeTitleForPath(title) || `track-${item.id}`;
+          const storagePath = `tracks/${item.id}-${index}__${safeTitle}${extension}`;
+
+          const { error } = await supabase.storage
+            .from(CLOUD_BUCKET)
+            .upload(storagePath, item.file, {
+              cacheControl: "3600",
+              upsert: false,
+              contentType: item.file.type || "audio/mpeg",
+            });
+
+          if (error) {
+            throw error;
+          }
+
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
+
+          cloudTracks.push({
+            id: `cloud-${storagePath}`,
+            title,
+            artist: "Cloud upload",
+            mood: "Shared",
+            duration: "Online",
+            accent: getAccentByIndex(index),
+            source: publicUrl,
+            storagePath,
+            isCloud: true,
+          });
+        }
+
+        setTracks((cur) => [...cloudTracks, ...cur]);
+        setSelectedTrackId(cloudTracks[0].id);
+        setUploadMessage(
+          `${cloudTracks.length} lagu baru berhasil diunggah ke cloud storage.`,
+        );
+        setPendingUploads([]);
+        nextTracks.forEach((track) => revokeTrackSource(track.source));
+        return;
+      }
+
       await Promise.all(
         nextTracks.map((track) =>
           saveTrackRecord({
@@ -299,9 +432,15 @@ function App() {
       setPendingUploads([]);
     } catch {
       nextTracks.forEach((track) => revokeTrackSource(track.source));
-      setUploadMessage(
-        "Upload berhasil dibaca, tapi gagal disimpan. Coba file lebih kecil.",
-      );
+      if (hasCloudStorageConfig) {
+        setUploadMessage(
+          "Upload gagal ke cloud. Pastikan bucket 'gariz-audio' sudah public.",
+        );
+      } else {
+        setUploadMessage(
+          "Upload berhasil dibaca, tapi gagal disimpan. Coba file lebih kecil.",
+        );
+      }
     }
   };
 
