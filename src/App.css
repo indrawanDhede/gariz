@@ -325,7 +325,7 @@
 
 .track-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 14px;
   width: 100%;
@@ -387,6 +387,27 @@
 .track-duration {
   color: rgba(233, 243, 236, 0.64);
   font-size: 0.92rem;
+}
+
+.track-delete {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.track-delete:hover,
+.track-delete:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+  outline: none;
 }
 
 .track-chip {
@@ -496,8 +517,144 @@
   }
 
   .track-chip,
-  .track-duration {
+  .track-duration,
+  .track-delete {
     grid-column: 3;
     justify-self: start;
   }
+}
+
+/* ── Drop zone ───────────────────────────────── */
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 28px 20px;
+  border: 2px dashed rgba(30, 215, 96, 0.35);
+  border-radius: 16px;
+  background: rgba(30, 215, 96, 0.04);
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+  text-align: center;
+}
+
+.drop-zone:hover,
+.drop-zone:focus-visible {
+  border-color: rgba(30, 215, 96, 0.65);
+  background: rgba(30, 215, 96, 0.08);
+  outline: none;
+}
+
+.drop-zone--over {
+  border-color: #1ed760;
+  background: rgba(30, 215, 96, 0.14);
+  box-shadow: 0 0 0 4px rgba(30, 215, 96, 0.15);
+}
+
+.drop-zone-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.drop-zone-label {
+  color: #f4f7f4;
+  font-size: 0.97rem;
+}
+
+.drop-zone-label strong {
+  color: #1ed760;
+}
+
+.drop-zone-hint {
+  color: #8a9a8a;
+  font-size: 0.82rem;
+}
+
+/* ── Upload modal ────────────────────────────── */
+.upload-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(4px);
+}
+
+.upload-modal {
+  background: #1a2420;
+  border: 1px solid rgba(30, 215, 96, 0.2);
+  border-radius: 20px;
+  padding: 32px 28px;
+  width: min(520px, calc(100vw - 40px));
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.upload-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #f4f7f4;
+}
+
+.upload-modal-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #8a9a8a;
+}
+
+.upload-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.upload-modal-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upload-modal-filename {
+  font-size: 0.8rem;
+  color: #8a9a8a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upload-modal-input {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1.5px solid rgba(30, 215, 96, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f4f7f4;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.upload-modal-input:focus {
+  border-color: #1ed760;
+}
+
+.upload-modal-input::placeholder {
+  color: #8a9a8a;
+}
+
+.upload-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 4px;
 }

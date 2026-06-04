@@ -117,11 +117,61 @@ function App() {
   const [uploadMessage, setUploadMessage] = useState(
     "Upload lagu terbaru untuk masuk ke lineup GariZ.",
   );
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [pendingUploads, setPendingUploads] = useState([]);
 
   const selectedTrack = useMemo(
-    () => tracks.find((track) => track.id === selectedTrackId) ?? tracks[0],
+    () =>
+      tracks.find((track) => track.id === selectedTrackId) ?? tracks[0] ?? null,
     [selectedTrackId, tracks],
   );
+
+  const revokeTrackSource = (source) => {
+    if (!source || !source.startsWith("blob:")) {
+      return;
+    }
+
+    URL.revokeObjectURL(source);
+    localUrlsRef.current = localUrlsRef.current.filter((url) => url !== source);
+  };
+
+  const handleDeleteTrack = (trackId) => {
+    const trackToDelete = tracks.find((track) => track.id === trackId);
+
+    if (!trackToDelete) {
+      return;
+    }
+
+    const remainingTracks = tracks.filter((track) => track.id !== trackId);
+
+    revokeTrackSource(trackToDelete.source);
+    setTracks(remainingTracks);
+
+    if (selectedTrackId === trackId) {
+      setSelectedTrackId(remainingTracks[0]?.id ?? null);
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute("src");
+        audioRef.current.load();
+      }
+    }
+  };
+
+  const handleConfirmDeleteTrack = (track) => {
+    const shouldDelete = window.confirm(
+      `Yakin ingin hapus lagu "${track.title}" dari list?`,
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    handleDeleteTrack(track.id);
+  };
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -149,24 +199,60 @@ function App() {
     };
   }, [demoTrackSource]);
 
+  const preparePendingUploads = (files) => {
+    const pending = files.map((file, index) => ({
+      id: Date.now() + index,
+      file,
+      title: file.name.replace(/\.[^.]+$/, ""),
+      blobUrl: URL.createObjectURL(file),
+    }));
+    setPendingUploads(pending);
+  };
+
   const handleFileChange = (event) => {
     const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+    preparePendingUploads(files);
+    event.target.value = "";
+  };
 
-    if (!files.length) {
-      return;
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (event) => {
+    if (!event.currentTarget.contains(event.relatedTarget)) {
+      setIsDragOver(false);
     }
+  };
 
-    const nextTracks = files.map((file, index) => {
-      const source = URL.createObjectURL(file);
-      localUrlsRef.current.push(source);
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(event.dataTransfer.files).filter((f) =>
+      f.type.startsWith("audio/"),
+    );
+    if (!files.length) return;
+    preparePendingUploads(files);
+  };
 
+  const handlePendingTitleChange = (id, title) => {
+    setPendingUploads((cur) =>
+      cur.map((item) => (item.id === id ? { ...item, title } : item)),
+    );
+  };
+
+  const handleConfirmUpload = () => {
+    const nextTracks = pendingUploads.map((item, index) => {
+      localUrlsRef.current.push(item.blobUrl);
       return {
-        id: Date.now() + index,
-        title: file.name.replace(/\.[^.]+$/, ""),
+        id: item.id,
+        title: item.title.trim() || item.file.name.replace(/\.[^.]+$/, ""),
         artist: "Upload terbaru",
         mood: "Fresh drop",
         duration: "Baru saja",
-        source,
+        source: item.blobUrl,
         accent:
           index % 3 === 0
             ? "linear-gradient(135deg, #1ed760, #0f766e)"
@@ -175,11 +261,15 @@ function App() {
               : "linear-gradient(135deg, #22c55e, #064e3b)",
       };
     });
-
-    setTracks((currentTracks) => [...nextTracks, ...currentTracks]);
+    setTracks((cur) => [...nextTracks, ...cur]);
     setSelectedTrackId(nextTracks[0].id);
     setUploadMessage(`${nextTracks.length} lagu baru berhasil diunggah.`);
-    event.target.value = "";
+    setPendingUploads([]);
+  };
+
+  const handleCancelUpload = () => {
+    pendingUploads.forEach((item) => URL.revokeObjectURL(item.blobUrl));
+    setPendingUploads([]);
   };
 
   const handlePlayPause = async () => {
@@ -235,9 +325,33 @@ function App() {
             >
               {isPlaying ? "Pause session" : "Play highlight"}
             </button>
-            <label className="secondary-button" htmlFor="track-upload">
-              Upload lagu terbaru
-            </label>
+          </div>
+
+          <div
+            className={`drop-zone${isDragOver ? " drop-zone--over" : ""}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            role="button"
+            tabIndex={0}
+            aria-label="Drop file audio atau klik untuk pilih file"
+            onClick={() => document.getElementById("track-upload").click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                document.getElementById("track-upload").click();
+              }
+            }}
+          >
+            <span className="drop-zone-icon" aria-hidden="true">
+              ♪
+            </span>
+            <span className="drop-zone-label">
+              Drag &amp; drop atau <strong>klik untuk pilih file</strong>
+            </span>
+            <span className="drop-zone-hint">
+              Format audio: MP3, WAV, OGG, FLAC, dll
+            </span>
             <input
               id="track-upload"
               className="upload-input"
@@ -270,25 +384,34 @@ function App() {
           <div className="hero-card-glow" />
           <div className="now-playing">
             <span className="now-tag">Now playing</span>
-            <h2>{selectedTrack.title}</h2>
-            <p>{selectedTrack.artist}</p>
+            {selectedTrack ? (
+              <>
+                <h2>{selectedTrack.title}</h2>
+                <p>{selectedTrack.artist}</p>
 
-            <div className="progress-track" aria-hidden="true">
-              <span style={{ width: `${progress}%` }} />
-            </div>
+                <div className="progress-track" aria-hidden="true">
+                  <span style={{ width: `${progress}%` }} />
+                </div>
 
-            <div className="progress-meta">
-              <span>{formatTime(currentTime)}</span>
-              <span>{selectedTrack.duration}</span>
-            </div>
+                <div className="progress-meta">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{selectedTrack.duration}</span>
+                </div>
 
-            <button
-              type="button"
-              className="mini-button"
-              onClick={handlePlayPause}
-            >
-              {isPlaying ? "Jeda" : "Putar"} track
-            </button>
+                <button
+                  type="button"
+                  className="mini-button"
+                  onClick={handlePlayPause}
+                >
+                  {isPlaying ? "Jeda" : "Putar"} track
+                </button>
+              </>
+            ) : (
+              <>
+                <h2>Belum ada lagu</h2>
+                <p>Upload atau tambahkan lagu dulu untuk mulai memutar sesi.</p>
+              </>
+            )}
           </div>
         </div>
       </section>
@@ -308,11 +431,18 @@ function App() {
               const isActive = track.id === selectedTrackId;
 
               return (
-                <button
+                <div
                   key={track.id}
-                  type="button"
                   className={`track-row ${isActive ? "active" : ""}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedTrackId(track.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedTrackId(track.id);
+                    }
+                  }}
                 >
                   <span className="track-index">
                     {String(index + 1).padStart(2, "0")}
@@ -327,7 +457,18 @@ function App() {
                   </span>
                   <span className="track-chip">{track.mood}</span>
                   <span className="track-duration">{track.duration}</span>
-                </button>
+                  <button
+                    type="button"
+                    className="track-delete"
+                    aria-label={`Hapus lagu ${track.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleConfirmDeleteTrack(track);
+                    }}
+                  >
+                    Hapus
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -371,6 +512,57 @@ function App() {
         onEnded={() => setIsPlaying(false)}
         onPause={() => setIsPlaying(false)}
       />
+
+      {pendingUploads.length > 0 && (
+        <div
+          className="upload-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit judul lagu sebelum upload"
+        >
+          <div className="upload-modal">
+            <h3 className="upload-modal-title">Edit judul lagu</h3>
+            <p className="upload-modal-subtitle">
+              {pendingUploads.length} file siap diunggah. Atur judul sebelum
+              masuk ke library.
+            </p>
+            <div className="upload-modal-list">
+              {pendingUploads.map((item) => (
+                <div key={item.id} className="upload-modal-item">
+                  <span className="upload-modal-filename">
+                    {item.file.name}
+                  </span>
+                  <input
+                    type="text"
+                    className="upload-modal-input"
+                    value={item.title}
+                    placeholder="Judul lagu..."
+                    onChange={(e) =>
+                      handlePendingTitleChange(item.id, e.target.value)
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="upload-modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleCancelUpload}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleConfirmUpload}
+              >
+                Tambah ke Library
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
