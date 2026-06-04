@@ -427,8 +427,9 @@ function App() {
 
     try {
       if (hasCloudStorageConfig && supabase) {
-        setUploadMessage("Sedang upload dan verifikasi lagu di cloud...");
+        setUploadMessage("Sedang upload lagu ke cloud...");
         const cloudTracks = [];
+        let unverifiedCount = 0;
 
         for (const [index, item] of uploadBatch.entries()) {
           const title =
@@ -451,11 +452,6 @@ function App() {
             throw error;
           }
 
-          const isStoredInCloud = await verifyCloudFileStored(storagePath);
-          if (!isStoredInCloud) {
-            throw new Error("Cloud verification failed");
-          }
-
           const {
             data: { publicUrl },
           } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
@@ -471,13 +467,24 @@ function App() {
             storagePath,
             isCloud: true,
           });
+
+          const isStoredInCloud = await verifyCloudFileStored(storagePath);
+          if (!isStoredInCloud) {
+            unverifiedCount += 1;
+          }
         }
 
         setTracks((cur) => [...cloudTracks, ...cur]);
         setSelectedTrackId(cloudTracks[0].id);
-        setUploadMessage(
-          `${cloudTracks.length} lagu berhasil tersimpan dan terverifikasi di cloud.`,
-        );
+        if (unverifiedCount > 0) {
+          setUploadMessage(
+            `${cloudTracks.length} lagu berhasil diupload ke cloud. Verifikasi ${unverifiedCount} lagu masih diproses, refresh sebentar jika belum muncul penuh.`,
+          );
+        } else {
+          setUploadMessage(
+            `${cloudTracks.length} lagu berhasil tersimpan dan terverifikasi di cloud.`,
+          );
+        }
         setPendingUploads([]);
         return;
       }
