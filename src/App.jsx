@@ -144,10 +144,50 @@ const verifyCloudFileStored = async (storagePath, attempts = 4) => {
   return false;
 };
 
+const fetchCloudTracks = async () => {
+  if (!supabase) {
+    return [];
+  }
+
+  const { data, error } = await supabase.storage
+    .from(CLOUD_BUCKET)
+    .list("tracks", {
+      limit: 200,
+      offset: 0,
+      sortBy: { column: "created_at", order: "desc" },
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? [])
+    .filter((item) => item.name && !item.name.endsWith("/"))
+    .map((item, index) => {
+      const storagePath = `tracks/${item.name}`;
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
+
+      return {
+        id: `cloud-${item.id ?? item.name}`,
+        title: parseCloudTrackTitle(item.name),
+        artist: "Cloud upload",
+        mood: "Shared",
+        duration: "Online",
+        accent: getAccentByIndex(index),
+        source: publicUrl,
+        storagePath,
+        isCloud: true,
+      };
+    });
+};
+
 function App() {
   const audioRef = useRef(null);
   const localUrlsRef = useRef([]);
   const autoPlayNextRef = useRef(false);
+  const recoveringTrackIdRef = useRef(null);
   const [tracks, setTracks] = useState([]);
   const [selectedTrackId, setSelectedTrackId] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -193,40 +233,7 @@ function App() {
       try {
         if (hasCloudStorageConfig && supabase) {
           try {
-            const { data, error } = await supabase.storage
-              .from(CLOUD_BUCKET)
-              .list("tracks", {
-                limit: 100,
-                offset: 0,
-                sortBy: { column: "created_at", order: "desc" },
-              });
-
-            if (error) {
-              throw error;
-            }
-
-            const cloudTracks = (data ?? [])
-              .filter((item) => item.name && !item.name.endsWith("/"))
-              .map((item, index) => {
-                const storagePath = `tracks/${item.name}`;
-                const {
-                  data: { publicUrl },
-                } = supabase.storage
-                  .from(CLOUD_BUCKET)
-                  .getPublicUrl(storagePath);
-
-                return {
-                  id: `cloud-${item.id ?? item.name}`,
-                  title: parseCloudTrackTitle(item.name),
-                  artist: "Cloud upload",
-                  mood: "Shared",
-                  duration: "Online",
-                  accent: getAccentByIndex(index),
-                  source: publicUrl,
-                  storagePath,
-                  isCloud: true,
-                };
-              });
+            const cloudTracks = await fetchCloudTracks();
 
             if (!isMounted) return;
 
@@ -456,6 +463,9 @@ function App() {
             data: { publicUrl },
           } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
 
+          const localSource = URL.createObjectURL(item.file);
+          localUrlsRef.current.push(localSource);
+
           cloudTracks.push({
             id: `cloud-${storagePath}`,
             title,
@@ -463,7 +473,8 @@ function App() {
             mood: "Shared",
             duration: "Online",
             accent: getAccentByIndex(index),
-            source: publicUrl,
+            source: localSource,
+            cloudSource: publicUrl,
             storagePath,
             isCloud: true,
           });
@@ -486,6 +497,25 @@ function App() {
           );
         }
         setPendingUploads([]);
+
+        void fetchCloudTracks()
+          .then((freshCloudTracks) => {
+            setTracks(freshCloudTracks);
+            const firstUploadedStoragePath = cloudTracks[0]?.storagePath;
+            const refreshedSelectedId =
+              freshCloudTracks.find(
+                (track) => track.storagePath === firstUploadedStoragePath,
+              )?.id ??
+              freshCloudTracks[0]?.id ??
+              null;
+            setSelectedTrackId(refreshedSelectedId);
+          })
+          .catch(() => {
+            setUploadMessage(
+              "Upload berhasil, tapi sinkron daftar cloud terlambat. Coba refresh sebentar.",
+            );
+          });
+
         return;
       }
 
@@ -566,6 +596,47 @@ function App() {
       setIsPlaying(true);
     } catch {
       setIsPlaying(false);
+    }
+  };
+
+  const handleAudioError = async () => {
+    if (!selectedTrack?.isCloud || !selectedTrack.storagePath || !supabase) {
+      return;
+    }
+
+    if (recoveringTrackIdRef.current === selectedTrack.id) {
+      return;
+    }
+
+    recoveringTrackIdRef.current = selectedTrack.id;
+
+    try {
+      const { data, error } = await supabase.storage
+        .from(CLOUD_BUCKET)
+        .download(selectedTrack.storagePath);
+
+      if (error || !data) {
+        throw error;
+      }
+
+      const blobSource = URL.createObjectURL(data);
+      localUrlsRef.current.push(blobSource);
+
+      setTracks((currentTracks) =>
+        currentTracks.map((track) =>
+          track.id === selectedTrack.id
+            ? { ...track, source: blobSource }
+            : track,
+        ),
+      );
+
+      setUploadMessage("Sumber lagu cloud dipulihkan. Coba play lagi.");
+    } catch {
+      setUploadMessage(
+        "Lagu cloud gagal diputar. Coba refresh atau upload ulang.",
+      );
+    } finally {
+      recoveringTrackIdRef.current = null;
     }
   };
 
@@ -972,6 +1043,7 @@ function App() {
         preload="metadata"
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleTimeUpdate}
+        onError={handleAudioError}
         onEnded={() => {
           if (tracks.length > 1) {
             selectRelativeTrack(1, true);
