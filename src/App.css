@@ -38,7 +38,7 @@
 
 .hero-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.7fr);
   gap: 24px;
   align-items: stretch;
   margin-bottom: 24px;
@@ -211,61 +211,56 @@
   overflow: hidden;
   display: flex;
   align-items: stretch;
+  min-height: clamp(560px, 82vh, 920px);
 }
 
 /* ── Player card ─────────────────────────────── */
 .player-card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 22px;
+  justify-content: flex-end;
+  align-items: stretch;
   padding: 36px 32px;
   width: 100%;
+  min-height: 100%;
+  overflow: hidden;
   background:
     linear-gradient(160deg, rgba(30, 215, 96, 0.07) 0%, transparent 55%),
     linear-gradient(220deg, rgba(124, 247, 194, 0.04) 0%, transparent 60%);
 }
 
-/* Album art */
-.player-art {
+.player-visual-layer {
   position: relative;
-  width: min(190px, 100%);
-  aspect-ratio: 1;
-  border-radius: 24px;
-  overflow: hidden;
-  flex-shrink: 0;
-  box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  transition:
-    transform 0.45s ease,
-    box-shadow 0.45s ease;
-}
-
-.player-art--playing {
-  transform: scale(1.05);
-  box-shadow:
-    0 32px 72px rgba(0, 0, 0, 0.6),
-    0 0 56px rgba(30, 215, 96, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
-
-.player-art-rings {
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.15) 0%,
-    transparent 50%,
-    rgba(255, 255, 255, 0.04) 100%
-  );
+  z-index: 1;
+}
+
+.player-overlay-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 50% 35%,
+      rgba(124, 247, 194, 0.15) 0%,
+      rgba(124, 247, 194, 0.02) 42%,
+      transparent 68%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(3, 8, 6, 0.28) 0%,
+      rgba(3, 8, 6, 0.08) 38%,
+      rgba(3, 8, 6, 0.78) 100%
+    );
 }
 
 .now-playing-scene {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 1;
 }
 
 .now-playing-scene canvas {
@@ -273,6 +268,16 @@
   height: 100% !important;
   display: block;
   filter: saturate(1.12) contrast(1.06);
+}
+
+.player-visual-fallback {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 38%,
+    rgba(30, 215, 96, 0.25),
+    rgba(10, 21, 16, 0.9) 75%
+  );
 }
 
 .player-art-icon {
@@ -287,6 +292,16 @@
   width: 48%;
   height: 48%;
   color: rgba(255, 255, 255, 0.2);
+}
+
+.player-content {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
 }
 
 /* Track info */
@@ -513,19 +528,22 @@
 .track-list {
   display: grid;
   gap: 12px;
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .track-row {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  padding: 14px;
+  padding: 10px 12px;
   color: inherit;
   text-align: left;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
   cursor: grab;
   transition:
@@ -559,9 +577,9 @@
 }
 
 .track-art {
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -613,10 +631,11 @@
 }
 
 .track-chip {
-  padding: 8px 12px;
+  padding: 6px 10px;
   color: #d8ffe8;
   background: rgba(30, 215, 96, 0.12);
   border: 1px solid rgba(30, 215, 96, 0.18);
+  font-size: 0.72rem;
 }
 
 .insight-panel {
@@ -692,6 +711,10 @@
   .content-grid {
     grid-template-columns: 1fr;
   }
+
+  .hero-card {
+    min-height: min(74vh, 720px);
+  }
 }
 
 @media (max-width: 720px) {
@@ -716,6 +739,14 @@
 
   .track-row {
     grid-template-columns: auto 48px minmax(0, 1fr);
+  }
+
+  .hero-card {
+    min-height: min(64vh, 560px);
+  }
+
+  .player-card {
+    padding: 24px 20px;
   }
 
   .track-chip,
