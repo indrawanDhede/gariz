@@ -143,6 +143,15 @@
   transform: translateY(-2px);
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.mini-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 .primary-button:focus-visible,
 .secondary-button:focus-visible,
 .mini-button:focus-visible,
@@ -837,4 +846,27 @@
   gap: 12px;
   justify-content: flex-end;
   margin-top: 4px;
+}
+
+.upload-submit-button {
+  min-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.upload-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(4, 19, 10, 0.32);
+  border-top-color: #04130a;
+  animation: upload-spin 0.8s linear infinite;
+}
+
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

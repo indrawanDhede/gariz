@@ -104,6 +104,41 @@ const formatTime = (value) => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const verifyCloudFileStored = async (storagePath, attempts = 3) => {
+  if (!supabase || !storagePath) {
+    return false;
+  }
+
+  const fileName = storagePath.split("/").pop();
+  if (!fileName) {
+    return false;
+  }
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const { data, error } = await supabase.storage
+      .from(CLOUD_BUCKET)
+      .list("tracks", {
+        limit: 10,
+        offset: 0,
+        search: fileName,
+      });
+
+    const hasFile =
+      !error && (data ?? []).some((item) => item.name === fileName);
+    if (hasFile) {
+      return true;
+    }
+
+    if (attempt < attempts - 1) {
+      await wait(350);
+    }
+  }
+
+  return false;
+};
+
 function App() {
   const audioRef = useRef(null);
   const localUrlsRef = useRef([]);
@@ -118,6 +153,7 @@ function App() {
   );
   const [isDragOver, setIsDragOver] = useState(false);
   const [pendingUploads, setPendingUploads] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [isTrackDragging, setIsTrackDragging] = useState(false);
   const [dragOverTrackId, setDragOverTrackId] = useState(null);
 
@@ -377,68 +413,70 @@ function App() {
   };
 
   const handleConfirmUpload = async () => {
-    let localFallbackTracks = [];
-    let cloudUploadFailed = false;
+    if (!pendingUploads.length || isUploading) {
+      return;
+    }
+
+    setIsUploading(true);
 
     try {
       if (hasCloudStorageConfig && supabase) {
-        try {
-          const cloudTracks = [];
+        setUploadMessage("Sedang upload dan verifikasi lagu di cloud...");
+        const cloudTracks = [];
 
-          for (const [index, item] of pendingUploads.entries()) {
-            const title =
-              item.title.trim() || item.file.name.replace(/\.[^.]+$/, "");
-            const extension = item.file.name.includes(".")
-              ? item.file.name.slice(item.file.name.lastIndexOf("."))
-              : "";
-            const safeTitle = sanitizeTitleForPath(title) || `track-${item.id}`;
-            const storagePath = `tracks/${item.id}-${index}__${safeTitle}${extension}`;
+        for (const [index, item] of pendingUploads.entries()) {
+          const title =
+            item.title.trim() || item.file.name.replace(/\.[^.]+$/, "");
+          const extension = item.file.name.includes(".")
+            ? item.file.name.slice(item.file.name.lastIndexOf("."))
+            : "";
+          const safeTitle = sanitizeTitleForPath(title) || `track-${item.id}`;
+          const storagePath = `tracks/${item.id}-${index}__${safeTitle}${extension}`;
 
-            const { error } = await supabase.storage
-              .from(CLOUD_BUCKET)
-              .upload(storagePath, item.file, {
-                cacheControl: "3600",
-                upsert: false,
-                contentType: item.file.type || "audio/mpeg",
-              });
-
-            if (error) {
-              throw error;
-            }
-
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
-
-            cloudTracks.push({
-              id: `cloud-${storagePath}`,
-              title,
-              artist: "Cloud upload",
-              mood: "Shared",
-              duration: "Online",
-              accent: getAccentByIndex(index),
-              source: publicUrl,
-              storagePath,
-              isCloud: true,
+          const { error } = await supabase.storage
+            .from(CLOUD_BUCKET)
+            .upload(storagePath, item.file, {
+              cacheControl: "3600",
+              upsert: false,
+              contentType: item.file.type || "audio/mpeg",
             });
+
+          if (error) {
+            throw error;
           }
 
-          setTracks((cur) => [...cloudTracks, ...cur]);
-          setSelectedTrackId(cloudTracks[0].id);
-          setUploadMessage(
-            `${cloudTracks.length} lagu baru berhasil diunggah ke cloud storage.`,
-          );
-          setPendingUploads([]);
-          return;
-        } catch {
-          cloudUploadFailed = true;
-          setUploadMessage(
-            "Upload cloud gagal. Menyimpan ke penyimpanan lokal sebagai cadangan.",
-          );
+          const isStoredInCloud = await verifyCloudFileStored(storagePath);
+          if (!isStoredInCloud) {
+            throw new Error("Cloud verification failed");
+          }
+
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from(CLOUD_BUCKET).getPublicUrl(storagePath);
+
+          cloudTracks.push({
+            id: `cloud-${storagePath}`,
+            title,
+            artist: "Cloud upload",
+            mood: "Shared",
+            duration: "Online",
+            accent: getAccentByIndex(index),
+            source: publicUrl,
+            storagePath,
+            isCloud: true,
+          });
         }
+
+        setTracks((cur) => [...cloudTracks, ...cur]);
+        setSelectedTrackId(cloudTracks[0].id);
+        setUploadMessage(
+          `${cloudTracks.length} lagu berhasil tersimpan dan terverifikasi di cloud.`,
+        );
+        setPendingUploads([]);
+        return;
       }
 
-      localFallbackTracks = pendingUploads.map((item, index) => {
+      const localFallbackTracks = pendingUploads.map((item, index) => {
         const source = URL.createObjectURL(item.file);
         localUrlsRef.current.push(source);
         return {
@@ -470,25 +508,30 @@ function App() {
 
       setTracks((cur) => [...localFallbackTracks, ...cur]);
       setSelectedTrackId(localFallbackTracks[0].id);
-      if (cloudUploadFailed) {
+      setUploadMessage(
+        `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
+      );
+      setPendingUploads([]);
+    } catch {
+      if (hasCloudStorageConfig && supabase) {
         setUploadMessage(
-          `${localFallbackTracks.length} lagu tersimpan lokal saja (browser ini). Untuk sinkron antar browser, perbaiki Supabase cloud policy/env.`,
+          "Upload cloud gagal. Lagu belum disimpan. Coba lagi sampai verifikasi cloud berhasil.",
         );
       } else {
         setUploadMessage(
-          `${localFallbackTracks.length} lagu baru berhasil diunggah dan tersimpan.`,
+          "Upload berhasil dibaca, tapi gagal disimpan. Coba file lebih kecil.",
         );
       }
-      setPendingUploads([]);
-    } catch {
-      localFallbackTracks.forEach((track) => revokeTrackSource(track.source));
-      setUploadMessage(
-        "Upload berhasil dibaca, tapi gagal disimpan. Coba file lebih kecil.",
-      );
+    } finally {
+      setIsUploading(false);
     }
   };
 
   const handleCancelUpload = () => {
+    if (isUploading) {
+      return;
+    }
+
     setPendingUploads([]);
   };
 
@@ -942,6 +985,7 @@ function App() {
                   <input
                     type="text"
                     className="upload-modal-input"
+                    disabled={isUploading}
                     value={item.title}
                     placeholder="Judul lagu..."
                     onChange={(e) =>
@@ -955,16 +999,25 @@ function App() {
               <button
                 type="button"
                 className="secondary-button"
+                disabled={isUploading}
                 onClick={handleCancelUpload}
               >
                 Batal
               </button>
               <button
                 type="button"
-                className="primary-button"
+                className="primary-button upload-submit-button"
+                disabled={isUploading}
                 onClick={handleConfirmUpload}
               >
-                Tambah ke Library
+                {isUploading && (
+                  <span className="upload-spinner" aria-hidden="true" />
+                )}
+                {isUploading
+                  ? hasCloudStorageConfig
+                    ? "Menyimpan ke Cloud..."
+                    : "Menyimpan..."
+                  : "Tambah ke Library"}
               </button>
             </div>
           </div>
